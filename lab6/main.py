@@ -34,7 +34,7 @@ def orange_mask(hsv: np.ndarray) -> np.ndarray:
 def segment_watershed(image_rgb: np.ndarray, mask: np.ndarray):
     """Разделяет слипшиеся объекты маски на отдельные через watershed."""
     distance = ndimage.distance_transform_edt(mask)
-    coords = peak_local_max(distance, min_distance=40, labels=mask)
+    coords = peak_local_max(distance, min_distance=70, labels=mask)
     peaks = np.zeros_like(distance, dtype=bool)
     peaks[tuple(coords.T)] = True
     markers = ndimage.label(peaks, structure=np.ones((3, 3)))[0]
@@ -55,13 +55,17 @@ def segment_watershed(image_rgb: np.ndarray, mask: np.ndarray):
     return labels, contoured, count
 
 
-def segment_kmeans(image_rgb: np.ndarray, k: int = 4):
-    """Кластеризация пикселей по цвету и выбор оранжевого кластера."""
+def segment_kmeans(image_rgb: np.ndarray, k: int = 6):
+    """Кластеризация пикселей по цвету и выбор оранжевого кластера.
+
+    Чем больше кластеров, тем лучше яркие апельсины отделяются от тёплого
+    по цвету деревянного стола.
+    """
     pixels = np.float32(image_rgb.reshape(-1, 3))
     kmeans = KMeans(n_clusters=k, random_state=0, n_init=4).fit(pixels)
     centers = kmeans.cluster_centers_
-    # Оранжевый: высокий R, средний G, низкий B.
-    scores = centers[:, 0] - centers[:, 2]
+    # Оранжевый: высокий R, низкий B и достаточно яркий (стол темнее).
+    scores = (centers[:, 0] - centers[:, 2]) + 0.5 * centers[:, 0]
     orange_cluster = int(np.argmax(scores))
     mask = (kmeans.labels_ == orange_cluster).reshape(image_rgb.shape[:2])
     result = image_rgb.copy()
